@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Switch - Rust Edition</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px}
+    .container{max-width:1400px;margin:0 auto;padding:20px}
+    .login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
+    .login-card{background:#1e293b;border-radius:12px;padding:30px;width:100%;max-width:400px}
+    .login-card h2{text-align:center;margin-bottom:25px}
+    .fg{margin-bottom:15px}
+    .fg label{display:block;margin-bottom:5px;color:#94a3b8;font-size:13px}
+    .fg input,.fg select,textarea{width:100%;padding:10px 12px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:14px}
+    .fg input:focus,.fg select:focus,textarea:focus{outline:none;border-color:#6366f1}
+    textarea{resize:vertical;min-height:60px}
+    .btn{background:#6366f1;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px;width:100%;transition:all .2s}
+    .btn:hover{background:#4f46e5}
+    .btn.sm{padding:6px 12px;width:auto;font-size:12px}
+    .btn.danger{background:#ef4444}
+    .btn.success{background:#22c55e}
+    .btn.warn{background:#f59e0b;color:#000}
+    .err{color:#ef4444;font-size:12px;margin-bottom:10px;display:none}
+    header{background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:20px 0;margin-bottom:30px}
+    header h1{font-size:24px;font-weight:600}
+    .tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+    .tab{padding:8px 16px;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:6px;cursor:pointer;font-size:13px}
+    .tab.active{background:#6366f1;color:#fff;border-color:#6366f1}
+    .card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px}
+    .card h2{font-size:16px;margin-bottom:15px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px}
+    .stat{background:#334155;border-radius:8px;padding:15px}
+    .stat .label{font-size:12px;color:#94a3b8;margin-bottom:5px}
+    .stat .value{font-size:24px;font-weight:600}
+    .stat .sub{font-size:11px;color:#64748b;margin-top:3px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #334155;font-size:13px}
+    th{color:#94a3b8;font-weight:500;font-size:12px}
+    .badge{padding:3px 8px;border-radius:4px;font-size:11px}
+    .badge.on{background:#166534;color:#86efac}
+    .badge.off{background:#7f1d1d;color:#fca5a5}
+    code{background:#334155;padding:2px 6px;border-radius:3px;font-size:12px}
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+    .modal.show{display:flex}
+    .modal-body{background:#1e293b;border-radius:12px;padding:24px;width:90%;max-width:600px;max-height:90vh;overflow-y:auto}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .x{background:none;border:none;color:#94a3b8;font-size:24px;cursor:pointer}
+    .hidden{display:none!important}
+    .drag-handle{cursor:grab;color:#64748b;padding:0 5px}
+    .drag-handle:active{cursor:grabbing}
+    .entry-row{display:flex;align-items:center;padding:10px;border-bottom:1px solid #334155}
+    .entry-row:hover{background:#334155}
+    .entry-row.disabled{opacity:0.5}
+    .chart-wrap{position:relative;height:300px}
+    .row-actions{display:flex;gap:5px}
+    .toast{position:fixed;bottom:20px;right:20px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:8px;z-index:2000;animation:fadeIn .3s}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login" class="login-wrap">
+  <div class="login-card">
+    <h2>🔐 API Switch (Rust)</h2>
+    <div class="fg"><label>用户名</label><input id="l-user" value="root" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="fg"><label>密码</label><input type="password" id="l-pass" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div id="l-err" class="err"></div>
+    <button class="btn" onclick="doLogin()">登录</button>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app" class="hidden">
+  <header>
+    <div class="container">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h1>🔄 API Switch</h1><div style="font-size:12px;opacity:.8">Rust + SQLite 高性能版</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="user-name" style="font-size:13px"></span>
+          <button class="btn sm" onclick="changePwd()">🔑</button>
+          <button class="btn sm danger" onclick="doLogout()">🚪</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('dash')">📊 Dashboard</button>
+      <button class="tab" onclick="showTab('ch')">📡 渠道</button>
+      <button class="tab" onclick="showTab('pool')">🔀 API Pool</button>
+      <button class="tab" onclick="showTab('key')">🔑 Keys</button>
+      <button class="tab" onclick="showTab('log')">📋 日志</button>
+      <button class="tab" onclick="showTab('set')">⚙️ 设置</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dash-panel">
+      <div class="grid" id="stats-grid"></div>
+      <div class="card"><h2>📈 模型调用趋势</h2><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
+      <div class="card"><h2>🏆 模型排名</h2><table id="model-ranking"></table></div>
+    </div>
+
+    <!-- Channels -->
+    <div id="ch-panel" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;margin-bottom:15px;flex-wrap:wrap;gap:10px">
+          <h2>渠道列表</h2>
+          <div><button class="btn sm" onclick="openModal('ch')">+ 添加渠道</button></div>
+        </div>
+        <table><thead><tr><th>名称</th><th>类型</th><th>Base URL</th><th>模型</th><th>延迟</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody id="ch-tb"></tbody></table>
+      </div>
+    </div>
+
+    <!-- API Pool -->
+    <div id="pool-panel" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;margin-bottom:15px;flex-wrap:wrap;gap:10px">
+          <div><h2>API Pool</h2><p style="font-size:12px;color:#64748b;margin-top:5px">拖拽排序，优先使用靠前的模型</p></div>
+          <div><button class="btn sm" onclick="testAllLatency()">🔄 测试延迟</button> <button class="btn sm" onclick="openModal('entry')">+ 添加模型</button></div>
+        </div>
+        <div id="entries-list"></div>
+      </div>
+    </div>
+
+    <!-- Keys -->
+    <div id="key-panel" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;margin-bottom:15px">
+          <h2>API Keys</h2>
+          <button class="btn sm" onclick="openModal('key')">+ 生成 Key</button>
+        </div>
+        <table><thead><tr><th>名称</th><th>Key</th><th>用量</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody id="key-tb"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div id="log-panel" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h2>请求日志</h2>
+          <button class="btn sm danger" onclick="clearLogs()">清空</button>
+        </div>
+        <div id="log-stats" style="display:flex;gap:20px;margin-bottom:15px;font-size:13px"></div>
+        <table><thead><tr><th>时间</th><th>模型</th><th>渠道</th><th>Token</th><th>延迟</th><th>状态</th></tr></thead>
+        <tbody id="log-tb"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="set-panel" class="hidden">
+      <div class="card">
+        <h2>熔断 & 路由设置</h2>
+        <div class="fg"><label>失败阈值（触发熔断）</label><input type="number" id="s-threshold" value="5"></div>
+        <div class="fg"><label>恢复时间（秒）</label><input type="number" id="s-reset" value="300"></div>
+        <div class="fg"><label>重试次数</label><input type="number" id="s-retry" value="3"></div>
+        <div class="fg"><label>超时（ms）</label><input type="number" id="s-timeout" value="60000"></div>
+        <div class="fg"><label>默认模型</label><input id="s-model" value=""></div>
+        <button class="btn" onclick="saveSettings()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Channel Modal -->
+<div id="ch-modal" class="modal">
+  <div class="modal-body">
+    <div class="modal-head"><h3 id="ch-modal-title">添加渠道</h3><button class="x" onclick="closeModal('ch')">×</button></div>
+    <form onsubmit="submitCh(event)">
+      <input type="hidden" id="ch-edit-id">
+      <div class="fg"><label>名称</label><input id="ch-name" required></div>
+      <div class="fg"><label>类型</label><select id="ch-type"><option>openai</option><option>claude</option><option>gemini</option><option>azure</option><option>custom</option></select></div>
+      <div class="fg"><label>Base URL</label><input id="ch-url" required placeholder="https://api.openai.com"></div>
+      <div class="fg"><label>API Key</label><input id="ch-key" required placeholder="sk-..."></div>
+      <div class="fg"><label>优先级</label><input type="number" id="ch-pri" value="0"></div>
+      <button class="btn" type="submit">保存</button>
+    </form>
+  </div>
+</div>
+
+<!-- Entry Modal -->
+<div id="entry-modal" class="modal">
+  <div class="modal-body">
+    <div class="modal-head"><h3>添加模型到 Pool</h3><button class="x" onclick="closeModal('entry')">×</button></div>
+    <form onsubmit="submitEntry(event)">
+      <div class="fg"><label>渠道</label><select id="entry-channel"></select></div>
+      <div class="fg"><label>模型名称</label><input id="entry-model" placeholder="gpt-4o-mini" required></div>
+      <div class="fg"><label>显示名称（可选）</label><input id="entry-display" placeholder="GPT-4o Mini"></div>
+      <button class="btn" type="submit">添加</button>
+    </form>
+  </div>
+</div>
+
+<!-- Discover Models Modal -->
+<div id="discover-modal" class="modal">
+  <div class="modal-body">
+    <div class="modal-head"><h3 id="discover-title">发现模型</h3><button class="x" onclick="closeModal('discover')">×</button></div>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:10px">勾选要添加到渠道的模型，取消勾选则不添加</p>
+    <div style="margin-bottom:10px;display:flex;gap:8px">
+      <button class="btn sm" onclick="discoverSelectAll(true)">全选</button>
+      <button class="btn sm" onclick="discoverSelectAll(false)">全不选</button>
+    </div>
+    <div id="discover-list" style="max-height:400px;overflow-y:auto"></div>
+    <div style="margin-top:15px;display:flex;gap:10px">
+      <button class="btn" onclick="applyDiscoveredModels()" style="flex:1">确认添加</button>
+      <button class="btn danger sm" onclick="closeModal('discover')">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Key Modal -->
+<div id="key-modal" class="modal">
+  <div class="modal-body">
+    <div class="modal-head"><h3>生成 API Key</h3><button class="x" onclick="closeModal('key')">×</button></div>
+    <form onsubmit="submitKey(event)">
+      <div class="fg"><label>名称</label><input id="key-name" placeholder="my-key"></div>
+      <div class="fg"><label>用量限额（0=无限）</label><input type="number" id="key-limit" value="0"></div>
+      <button class="btn" type="submit">生成</button>
+    </form>
+  </div>
+</div>
+
+<script>
+const API='/api';
+let token=localStorage.getItem('token')||'';
+let chartTrend=null;
+
+// ====== Auth ======
+async function checkAuth(){
+  if(!token){showLogin();return}
+  try{
+    const r=await fetch(API+'/me',{headers:{Authorization:'Bearer '+token}});
+    if(r.ok){const d=await r.json();document.getElementById('user-name').textContent=d.username;showApp();loadDash()}
+    else{token='';localStorage.removeItem('token');showLogin()}
+  }catch(e){showLogin()}
+}
+
+function showLogin(){document.getElementById('login').classList.remove('hidden');document.getElementById('app').classList.add('hidden')}
+function showApp(){document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden')}
+
+async function doLogin(){
+  const u=document.getElementById('l-user').value,p=document.getElementById('l-pass').value;
+  const err=document.getElementById('l-err');err.style.display='none';
+  try{
+    const r=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(r.ok){const d=await r.json();token=d.token;localStorage.setItem('token',token);checkAuth()}
+    else{const e=await r.json();err.textContent=e.error||'登录失败';err.style.display='block'}
+  }catch(e){err.textContent='网络错误';err.style.display='block'}
+}
+
+function doLogout(){localStorage.removeItem('token');token='';showLogin()}
+
+async function changePwd(){
+  const old=prompt('旧密码:');if(!old)return;
+  const np=prompt('新密码:');if(!np)return;
+  const r=await fetch(API+'/change-password',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({old_password:old,new_password:np})});
+  const d=await r.json();
+  if(d.success){alert('密码已修改，请重新登录');doLogout()}
+  else alert(d.error||'修改失败')
+}
+
+// ====== Tabs ======
+function showTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  event.target.classList.add('active');
+  ['dash','ch','pool','key','log','set'].forEach(p=>document.getElementById(p+'-panel').classList.add('hidden'));
+  document.getElementById(t+'-panel').classList.remove('hidden');
+  if(t==='dash')loadDash();else if(t==='ch')loadCh();else if(t==='pool')loadEntries();else if(t==='key')loadKeys();else if(t==='log')loadLogs();else loadSettings()
+}
+
+// ====== Dashboard ======
+async function loadDash(){
+  const [statsR,rankingR,chartR]=await Promise.all([
+    fetch(API+'/dashboard/stats',{headers:{Authorization:'Bearer '+token}}),
+    fetch(API+'/dashboard/models',{headers:{Authorization:'Bearer '+token}}),
+    fetch(API+'/dashboard/chart?granularity=day',{headers:{Authorization:'Bearer '+token}})
+  ]);
+  const stats=await statsR.json();
+  const ranking=await rankingR.json();
+  const chartData=await chartR.json();
+
+  document.getElementById('stats-grid').innerHTML=`
+    <div class="stat"><div class="label">今日请求</div><div class="value">${stats.today_requests}</div><div class="sub">总计: ${stats.total_requests}</div></div>
+    <div class="stat"><div class="label">今日 Token</div><div class="value">${(stats.today_prompt_tokens+stats.today_completion_tokens).toLocaleString()}</div><div class="sub">提示: ${stats.today_prompt_tokens} / 补全: ${stats.today_completion_tokens}</div></div>
+    <div class="stat"><div class="label">总 Token</div><div class="value">${(stats.total_prompt_tokens+stats.total_completion_tokens).toLocaleString()}</div><div class="sub">提示: ${stats.total_prompt_tokens} / 补全: ${stats.total_completion_tokens}</div></div>
+    <div class="stat"><div class="label">成功率</div><div class="value">${stats.total_requests?Math.round((stats.total_requests-stats.today_requests)/stats.total_requests*100):0}%</div><div class="sub">基于总请求</div></div>
+  `;
+
+  document.getElementById('model-ranking').innerHTML=`<thead><tr><th>模型</th><th>调用次数</th><th>Token</th></tr></thead><tbody>${
+    ranking.map(r=>`<tr><td><code>${r.model}</code></td><td>${r.count}</td><td>${r.tokens}</td></tr>`).join('')
+  }</tbody>`;
+
+  // Chart
+  const ctx=document.getElementById('chart-trend').getContext('2d');
+  if(chartTrend)chartTrend.destroy();
+  const byTime={};
+  chartData.forEach(p=>{byTime[p.time]=byTime[p.time]||{};byTime[p.time][p.model]=(byTime[p.time][p.model]||0)+p.value});
+  const times=Object.keys(byTime).sort();
+  const models=[...new Set(chartData.map(p=>p.model))].slice(0,8);
+  chartTrend=new Chart(ctx,{
+    type:'line',
+    data:{labels:times,datasets:models.map((m,i)=>({label:m,data:times.map(t=>byTime[t][m]||0),borderColor:`hsl(${i*45},70%,60%)`,fill:false,tension:0.3}))},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}
+  });
+}
+
+// ====== Channels ======
+async function loadCh(){
+  const r=await fetch(API+'/channels',{headers:{Authorization:'Bearer '+token}});
+  const chs=await r.json();
+  document.getElementById('ch-tb').innerHTML=chs.map(c=>`
+    <tr>
+      <td>${c.name}</td><td>${c.api_type}</td><td><code>${c.base_url}</code></td>
+      <td>${c.models?JSON.parse(c.models).length:0}个 <button class="btn sm" style="font-size:10px;padding:2px 6px" onclick='showChannelModels("${c.id}")'>📋</button></td>
+      <td>${c.response_ms||'-'}</td>
+      <td><span class="badge ${c.enabled?'on':'off'}">${c.enabled?'启用':'禁用'}</span></td>
+      <td class="row-actions">
+        <button class="btn sm" onclick="discoverModels('${c.id}')">🔍发现</button>
+        <button class="btn sm" onclick="testChannel('${c.id}')">⚡测试</button>
+        <button class="btn sm ${c.enabled?'danger':'success'}" onclick="toggleCh('${c.id}',${!c.enabled})">${c.enabled?'禁用':'启用'}</button>
+        <button class="btn sm" onclick="editCh('${c.id}')">✏️</button>
+        <button class="btn sm danger" onclick="delCh('${c.id}')">🗑️</button>
+      </td>
+    </tr>`).join('')
+}
+
+async function showChannelModels(id){
+  const chs=await (await fetch(API+'/channels',{headers:{Authorization:'Bearer '+token}})).json();
+  const ch=chs.find(c=>c.id===id);
+  if(!ch)return;
+  const models=JSON.parse(ch.models||'[]');
+  if(models.length===0){toast('此渠道暂无模型');return}
+  let html='<div style="max-height:300px;overflow-y:auto">'+models.map(m=>`<div style="padding:8px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center"><span>${m}</span><button class="btn sm danger" style="font-size:10px;padding:2px 8px" onclick="removeModelFromChannel('${id}','${m}')">移除</button></div>`).join('')+'</div>';
+  document.getElementById('discover-list').innerHTML=html;
+  document.getElementById('discover-title').textContent=`${ch.name} 的模型 (${models.length})`;
+  discoverChannelId=id;
+  document.getElementById('discover-modal').querySelector('.modal-body').innerHTML=document.getElementById('discover-modal').querySelector('.modal-body').innerHTML;
+  openModal('discover')
+}
+
+async function removeModelFromChannel(chId,modelName){
+  const chs=await (await fetch(API+'/channels',{headers:{Authorization:'Bearer '+token}})).json();
+  const ch=chs.find(c=>c.id===chId);
+  if(!ch)return;
+  const models=JSON.parse(ch.models||'[]').filter(m=>m!==modelName);
+  await fetch(API+'/channels/'+chId,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({models:JSON.stringify(models)})});
+  showChannelModels(chId)
+}
+
+let discoveredModels=[];
+let discoverChannelId='';
+
+async function discoverModels(id){
+  discoverChannelId=id;
+  toast('正在发现模型...');
+  const r=await fetch(API+`/channels/${id}/discover`,{method:'POST',headers:{Authorization:'Bearer '+token}});
+  const d=await r.json();
+  if(!d.models||d.models.length===0){toast('未发现模型');return}
+  // Get existing models
+  const chs=await (await fetch(API+'/channels',{headers:{Authorization:'Bearer '+token}})).json();
+  const ch=chs.find(c=>c.id===id);
+  const existing=JSON.parse(ch?.models||'[]');
+  discoveredModels=d.models.map(m=>({name:m,selected:!existing.includes(m),existing:existing.includes(m)}));
+  document.getElementById('discover-title').textContent=`发现 ${d.models.length} 个模型`;
+  document.getElementById('discover-list').innerHTML=discoveredModels.map((m,i)=>`
+    <label style="display:flex;align-items:center;padding:8px;border-bottom:1px solid #334155;cursor:pointer">
+      <input type="checkbox" id="dm-${i}" ${m.selected?'checked':''} style="margin-right:10px;width:18px;height:18px">
+      <div style="flex:1">
+        <span style="font-size:14px">${m.name}</span>
+        ${m.existing?'<span class="badge on" style="margin-left:8px">已添加</span>':''}
+      </div>
+    </label>
+  `).join('');
+  openModal('discover')
+}
+
+function discoverSelectAll(val){
+  discoveredModels.forEach((_,i)=>{const cb=document.getElementById('dm-'+i);if(cb)cb.checked=val})
+}
+
+async function applyDiscoveredModels(){
+  const selected=[];
+  discoveredModels.forEach((m,i)=>{const cb=document.getElementById('dm-'+i);if(cb&&cb.checked)selected.push(m.name)});
+  if(selected.length===0){toast('未选择模型');return}
+  // Update channel models
+  await fetch(API+'/channels/'+discoverChannelId,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({models:JSON.stringify(selected)})});
+  closeModal('discover');
+  toast(`已添加 ${selected.length} 个模型`);
+  loadCh()
+}
+
+async function testChannel(id){
+  toast('测试中...');
+  const r=await fetch(API+`/channels/${id}/test`,{method:'POST',headers:{Authorization:'Bearer '+token}});
+  const d=await r.json();
+  toast(d.success?`✅ 成功 (${d.latency_ms}ms)`:`❌ 失败: ${d.error||d.response||''}`)
+}
+
+async function submitCh(e){
+  e.preventDefault();
+  const editId=document.getElementById('ch-edit-id').value;
+  const body={name:document.getElementById('ch-name').value,api_type:document.getElementById('ch-type').value,base_url:document.getElementById('ch-url').value,api_key:document.getElementById('ch-key').value,priority:parseInt(document.getElementById('ch-pri').value)||0,models:'[]'};
+  const url=editId?API+'/channels/'+editId:API+'/channels';
+  const method=editId?'PUT':'POST';
+  await fetch(url,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(body)});
+  closeModal('ch');loadCh()
+}
+
+async function editCh(id){
+  const r=await fetch(API+'/channels/'+id,{headers:{Authorization:'Bearer '+token}});
+  const c=await r.json();
+  document.getElementById('ch-edit-id').value=c.id;
+  document.getElementById('ch-name').value=c.name;
+  document.getElementById('ch-type').value=c.api_type;
+  document.getElementById('ch-url').value=c.base_url;
+  document.getElementById('ch-key').value=c.api_key;
+  document.getElementById('ch-pri').value=c.priority;
+  document.getElementById('ch-modal-title').textContent='编辑渠道';
+  openModal('ch')
+}
+
+async function toggleCh(id,en){
+  await fetch(API+'/channels/'+id,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({enabled:en})});
+  loadCh()
+}
+
+async function delCh(id){
+  if(!confirm('删除此渠道?'))return;
+  await fetch(API+'/channels/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});
+  loadCh()
+}
+
+// ====== Entries (API Pool) ======
+let entriesData=[];
+async function loadEntries(){
+  const r=await fetch(API+'/entries',{headers:{Authorization:'Bearer '+token}});
+  entriesData=await r.json();
+  const chs=await (await fetch(API+'/channels',{headers:{Authorization:'Bearer '+token}})).json();
+  document.getElementById('entry-channel').innerHTML=chs.filter(c=>c.enabled).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  renderEntries()
+}
+
+function renderEntries(){
+  document.getElementById('entries-list').innerHTML=entriesData.map((e,i)=>`
+    <div class="entry-row ${e.enabled?'':'disabled'}" draggable="true" ondragstart="dragStart(event,${i})" ondragover="dragOver(event)" ondrop="drop(event,${i})">
+      <span class="drag-handle">⋮⋮</span>
+      <span style="width:8px;height:8px;border-radius:50%;background:${e.enabled?'#22c55e':'#64748b'};margin-right:10px"></span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500">${e.display_name||e.model}</div>
+        <div style="font-size:12px;color:#64748b">${e.channel_name||'—'} / ${e.model}</div>
+      </div>
+      ${e.response_ms?`<span style="font-size:12px;margin-right:10px;color:${e.response_ms==='X'?'#ef4444':'#22c55e'}">${e.response_ms}</span>`:''}
+      <button class="btn sm" onclick="testEntry('${e.id}')">💬</button>
+      <button class="btn sm ${e.enabled?'warn':'success'}" onclick="toggleEntry('${e.id}',${!e.enabled})">${e.enabled?'禁用':'启用'}</button>
+      <button class="btn sm danger" onclick="delEntry('${e.id}')">🗑️</button>
+    </div>
+  `).join('')
+}
+
+let draggedIdx=null;
+function dragStart(e,idx){draggedIdx=idx;e.dataTransfer.effectAllowed='move'}
+function dragOver(e){e.preventDefault()}
+function drop(e,idx){
+  e.preventDefault();
+  if(draggedIdx===null||draggedIdx===idx)return;
+  const item=entriesData.splice(draggedIdx,1)[0];
+  entriesData.splice(idx,0,item);
+  renderEntries();
+  fetch(API+'/entries/reorder',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({ordered_ids:entriesData.map(e=>e.id)})});
+  draggedIdx=null
+}
+
+async function submitEntry(e){
+  e.preventDefault();
+  await fetch(API+'/entries',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({
+    channel_id:document.getElementById('entry-channel').value,
+    model:document.getElementById('entry-model').value,
+    display_name:document.getElementById('entry-display').value||null
+  })});
+  closeModal('entry');loadEntries()
+}
+
+async function toggleEntry(id,en){
+  await fetch(API+`/entries/${id}/toggle`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({enabled:en})});
+  loadEntries()
+}
+
+async function delEntry(id){
+  if(!confirm('删除此条目?'))return;
+  await fetch(API+`/entries/${id}`,{method:'DELETE',headers:{Authorization:'Bearer '+token}});
+  loadEntries()
+}
+
+async function testEntry(id){
+  const msg=prompt('输入测试消息:','hi');
+  if(!msg)return;
+  const r=await fetch(API+'/chat/test',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({model:entriesData.find(e=>e.id===id)?.model,message:msg})});
+  const d=await r.json();
+  alert(d.choices?d.choices[0].message.content:JSON.stringify(d,null,2))
+}
+
+async function testAllLatency(){
+  toast('测试所有条目延迟...');
+  for(const e of entriesData){
+    try{
+      const start=Date.now();
+      await fetch(API+`/entries/${e.id}/test`,{method:'POST',headers:{Authorization:'Bearer '+token}});
+      e.response_ms=(Date.now()-start)+'ms';
+    }catch(err){e.response_ms='X'}
+  }
+  renderEntries()
+}
+
+// ====== API Keys ======
+async function loadKeys(){
+  const r=await fetch(API+'/keys',{headers:{Authorization:'Bearer '+token}});
+  if(r.status===401){doLogout();return}
+  const keys=await r.json();
+  document.getElementById('key-tb').innerHTML=keys.map(k=>`
+    <tr>
+      <td>${k.name}</td>
+      <td><code>${k.key}</code></td>
+      <td>${k.usage_count}${k.usage_limit?'/'+k.usage_limit:'/∞'}</td>
+      <td><span class="badge ${k.enabled?'on':'off'}">${k.enabled?'启用':'禁用'}</span></td>
+      <td>
+        <button class="btn sm ${k.enabled?'danger':'success'}" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?'禁用':'启用'}</button>
+        <button class="btn sm danger" onclick="delKey('${k.id}')">🗑️</button>
+      </td>
+    </tr>`).join('')
+}
+
+async function submitKey(e){
+  e.preventDefault();
+  const r=await fetch(API+'/keys',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({name:document.getElementById('key-name').value||'default',usage_limit:parseInt(document.getElementById('key-limit').value)||0})});
+  const k=await r.json();
+  closeModal('key');loadKeys();
+  if(k.key)alert('Key 已生成:\n'+k.key+'\n\n请立即保存，此 Key 只显示一次！')
+}
+
+async function toggleKey(id,en){
+  await fetch(API+`/keys/${id}/toggle`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({enabled:en})});
+  loadKeys()
+}
+
+async function delKey(id){
+  if(!confirm('删除此 Key?'))return;
+  await fetch(API+`/keys/${id}`,{method:'DELETE',headers:{Authorization:'Bearer '+token}});
+  loadKeys()
+}
+
+// ====== Logs ======
+async function loadLogs(){
+  const[sr,lr]=await Promise.all([
+    fetch(API+'/logs/stats',{headers:{Authorization:'Bearer '+token}}),
+    fetch(API+'/logs?limit=100',{headers:{Authorization:'Bearer '+token}})
+  ]);
+  const stats=await sr.json();
+  const{logs}=await lr.json();
+  document.getElementById('log-stats').innerHTML=`
+    <div>总请求: <b>${stats.total}</b></div>
+    <div style="color:#22c55e">成功: <b>${stats.success}</b></div>
+    <div style="color:#ef4444">失败: <b>${stats.errors}</b></div>
+    <div>今日: <b>${stats.today}</b></div>`;
+  document.getElementById('log-tb').innerHTML=logs.map(l=>`
+    <tr>
+      <td>${new Date(l.created_at).toLocaleString()}</td>
+      <td>${l.model||'-'}</td><td>${l.channel_name||l.channel_id||'-'}</td>
+      <td>${l.prompt_tokens}/${l.completion_tokens}</td>
+      <td>${l.latency_ms}ms</td>
+      <td><span class="badge ${l.status_code>=200&&l.status_code<300?'on':'off'}">${l.status_code}</span></td>
+    </tr>`).join('')
+}
+
+async function clearLogs(){
+  if(!confirm('清空所有日志?'))return;
+  await fetch(API+'/logs/clear',{method:'POST',headers:{Authorization:'Bearer '+token}});
+  loadLogs()
+}
+
+// ====== Settings ======
+async function loadSettings(){
+  const r=await fetch(API+'/settings',{headers:{Authorization:'Bearer '+token}});
+  const s=await r.json();
+  document.getElementById('s-threshold').value=s.circuit_breaker_threshold;
+  document.getElementById('s-reset').value=s.circuit_breaker_reset_time;
+  document.getElementById('s-retry').value=s.retry_times;
+  document.getElementById('s-timeout').value=s.timeout;
+  document.getElementById('s-model').value=s.default_model||''
+}
+
+async function saveSettings(){
+  await fetch(API+'/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+    body:JSON.stringify({circuit_breaker_threshold:parseInt(document.getElementById('s-threshold').value),circuit_breaker_reset_time:parseInt(document.getElementById('s-reset').value),retry_times:parseInt(document.getElementById('s-retry').value),timeout:parseInt(document.getElementById('s-timeout').value),auto_select_new_models:true,max_tokens_per_month:0,default_model:document.getElementById('s-model').value})});
+  toast('设置已保存')
+}
+
+// ====== Modals ======
+function openModal(t){document.getElementById(t+'-modal').classList.add('show');if(t==='ch'){document.getElementById('ch-edit-id').value='';document.getElementById('ch-modal-title').textContent='添加渠道';document.getElementById('ch-name').value='';document.getElementById('ch-url').value='';document.getElementById('ch-key').value='';document.getElementById('ch-pri').value='0'}}
+function closeModal(t){document.getElementById(t+'-modal').classList.remove('show')}
+
+// ====== Toast ======
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000)}
+
+// Init
+checkAuth();
+</script>
+</body>
+</html>

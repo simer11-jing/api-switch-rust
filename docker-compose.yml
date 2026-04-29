@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  api-switch:
+    build: .
+    container_name: api-switch
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - DATABASE_PATH=/app/data/api-switch.db
+      - REDIS_URL=redis://127.0.0.1:6379
+      - PORT=9091
+    volumes:
+      - /data/api-switch:/app/data
